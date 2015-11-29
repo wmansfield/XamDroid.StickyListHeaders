@@ -86,6 +86,11 @@ namespace com.refractored.components.stickylistheaders
         private DataSetObserver m_DataSetObserver;
         private bool _initialized;
 
+        private float m_HeaderOffset;//not used yet
+        private float m_DownY;
+        private bool m_HeaderOwnsTouch;
+        private float m_TouchSlop;
+
         private class AdapterHeaderAdapterClickListener : IOnHeaderAdapterClickListener
         {
             private readonly IOnHeaderListClickListener m_OnHeaderListClickListener;
@@ -154,6 +159,8 @@ namespace com.refractored.components.stickylistheaders
         {
             if (!_initialized)
             {
+                m_TouchSlop = ViewConfiguration.Get(this.Context).ScaledTouchSlop;
+
                 m_DataSetObserver = new StickyListHeadersListViewObserver(this);
                 m_AdapterHeaderAdapterClickListener = new AdapterHeaderAdapterClickListener(OnHeaderListClickListener, this);
 
@@ -189,6 +196,43 @@ namespace com.refractored.components.stickylistheaders
             base.OnFinishInflate();
 
             Initialize(this.Context);
+        }
+        public override bool DispatchTouchEvent(MotionEvent ev)
+        {
+            if (ev.Action == MotionEventActions.Down) 
+            {
+                m_DownY = ev.GetY();
+                m_HeaderOwnsTouch = m_Header != null && m_DownY <= m_Header.Height + m_HeaderOffset;
+            }
+
+            bool handled = false;
+            if (m_HeaderOwnsTouch) 
+            {
+                if (m_Header != null && Math.Abs(m_DownY - ev.GetY()) <= m_TouchSlop) {
+                    handled = m_Header.DispatchTouchEvent(ev);
+                } 
+                else 
+                {
+                    if (m_Header != null) {
+                        MotionEvent cancelEvent = MotionEvent.Obtain(ev);
+                        cancelEvent.Action = MotionEventActions.Cancel;
+                        m_Header.DispatchTouchEvent(cancelEvent);
+                        cancelEvent.Recycle();
+                    }
+
+                    MotionEvent downEvent = MotionEvent.Obtain(ev.DownTime, ev.EventTime, ev.Action, ev.GetX(), m_DownY, ev.MetaState);
+                    downEvent.Action = MotionEventActions.Down;
+                    handled = base.DispatchTouchEvent(downEvent);
+                    downEvent.Recycle();
+                    m_HeaderOwnsTouch = false;
+                }
+            } 
+            else 
+            {
+                handled = base.DispatchTouchEvent(ev);
+            }
+
+            return handled;
         }
 
         protected override void OnLayout(bool changed, int left, int top, int right, int bottom)
